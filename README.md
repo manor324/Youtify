@@ -1,4 +1,4 @@
-# 🎵 Spotify to YouTube Music Playlist Migrator
+# Spotify to YouTube Music Playlist Migrator
 
 A clean, resilient Python CLI tool to migrate your Spotify playlists and "Liked Songs" directly to YouTube Music.
 
