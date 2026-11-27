@@ -1,127 +1,104 @@
-# Spotify to YouTube Music Playlist Migrator
+# spotify-to-ytmusic
 
-A clean, resilient Python CLI tool to migrate your Spotify playlists and "Liked Songs" directly to YouTube Music.
+Migrate Spotify playlists and Liked Songs to YouTube Music, via a local web dashboard or CLI. Built with [spotipy](https://github.com/spotipy-dev/spotipy), [ytmusicapi](https://github.com/sigma67/ytmusicapi), and [FastAPI](https://fastapi.tiangolo.com/).
 
-Built using [`spotipy`](https://github.com/spotipy-dev/spotipy) and [`ytmusicapi`](https://github.com/sigma67/ytmusicapi).
+## What it does
 
----
+- Paginates through playlists of any size and pulls Liked Songs directly from your Spotify library.
+- Searches YouTube Music under `songs` first and falls back to `videos` when a studio track entry isn't available.
+- Retries unmatched tracks using title-only search and writes remaining misses to `failed_tracks.txt`.
+- Runs either as a local web UI (`web.py`) with live progress streaming or as a CLI (`main.py`).
 
-## Features
-
-- **Any Playlist Size**: Handles pagination seamlessly (Spotify limits responses to 50–100 tracks per page; this tool retrieves all tracks regardless of playlist length).
-- **Liked Songs Support**: Transfers your Spotify "Liked Songs" library (which standard Spotify playlist endpoints don't expose directly).
-- **Dual Matching**: Searches YouTube Music's official `songs` catalog first; falls back to `videos` (official music videos/audio) if no direct song entry exists.
-- **Auto-Retry & Failure Logging**: Unmatched songs undergo a relaxed retry pass, and any final unresolved items are exported to `failed_tracks.txt`.
-- **Anti-Rate-Limiting**: Configurable delay between playlist modifications to keep YouTube from throttling requests.
-- **Zero Leaked Secrets**: Strict `.gitignore` and `.env` template so tokens and credentials never get committed to GitHub.
-
----
-
-## Repository Structure
+## Project layout
 
 ```text
 spotify-to-ytmusic/
-├── auth_setup.py      # Verification and setup script for Spotify & YT Music auth
-├── migrator.py        # Core transfer engine (search, pagination, retry)
-├── main.py            # CLI and interactive menu
-├── requirements.txt   # Python dependencies
-├── .env.example       # Example configuration file
-├── .gitignore         # Prevents accidental token/credential leaks
-└── README.md
+├── web.py             FastAPI server and SSE progress stream
+├── static/            Tailwind CSS + vanilla JS frontend
+├── main.py            CLI entrypoint
+├── migrator.py        Playlist fetching, search, and transfer logic
+├── auth_setup.py      Spotify and YouTube Music auth helpers
+├── tests/             Unit and web API tests
+├── requirements.txt
+├── .env.example
+└── .gitignore
 ```
 
----
+## Setup
 
-## How-to
-
-### 1. Clone the repository & install dependencies
+### 1. Install dependencies
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/spotify-to-ytmusic.git
 cd spotify-to-ytmusic
 
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
----
+### 2. Spotify API credentials
 
-### 2. Configure Spotify Credentials
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+2. Add `http://127.0.0.1:8080` to **Redirect URIs** and enable **Web API**.
+3. Copy `.env.example` to `.env` and fill in `SPOTIPY_CLIENT_ID` and `SPOTIPY_CLIENT_SECRET`:
 
-1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and sign in.
-2. Click **Create app**:
-   - **App name**: `Spotify to YTMusic`
-   - **Redirect URI**: `http://127.0.0.1:8080` (Important: Add this exact URI).
-   - Select **Web API** under "Which API/SDKs are you planning to use?".
-3. Save the app, then go to **Settings** to find your **Client ID** and **Client Secret**.
-4. Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-5. Open `.env` and fill in your keys:
-   ```ini
-   SPOTIPY_CLIENT_ID=your_client_id_here
-   SPOTIPY_CLIENT_SECRET=your_client_secret_here
-   SPOTIPY_REDIRECT_URI=http://127.0.0.1:8080
-   ```
+```bash
+cp .env.example .env
+```
 
----
+### 3. YouTube Music authentication
 
-### 3. Configure YouTube Music Authentication
+Run the setup script:
 
-Run the setup helper:
 ```bash
 python auth_setup.py
 ```
 
-This will guide you through connecting your YouTube Music account via OAuth or Browser credentials:
+You can authenticate with either:
+- **Google OAuth** (`oauth.json`): requires a Google Cloud OAuth client ID/secret configured for *TVs and Limited Input devices*.
+- **Browser headers** (`browser.json`): paste request headers copied from `music.youtube.com` in browser DevTools. You can also paste these directly inside the web UI modal.
 
-#### ⚠️ Understanding the "7-Day OAuth Expiration" Issue (Why it stops working!)
-> If you create a Google Cloud OAuth app for YouTube, Google places it in **"Testing"** mode by default.
-> **In "Testing" mode, user refresh tokens expire every 7 days!** After 7 days, your script will suddenly fail with `invalid_grant` or token expired errors.
->
-> **How to fix this permanently:**
-> 1. Go to [Google Cloud Console](https://console.cloud.google.com/) -> **APIs & Services** -> **OAuth consent screen**.
-> 2. Under **Publishing status**, click **"Publish App"** (change from *Testing* to *In Production*).
-> 3. You do **not** need to submit it for verification if you only use it with your own account; you just accept the unverified app warning when signing in. Once published, your refresh token will last indefinitely.
-
-Alternatively, if you prefer not using Google Cloud OAuth, you can use the browser header extraction method supported by `ytmusicapi` (see [ytmusicapi documentation](https://ytmusicapi.readthedocs.io/en/stable/setup/browser.html)).
-
----
+Note on Google OAuth expiration: Google Cloud projects left in **Testing** mode expire refresh tokens after 7 days. If your OAuth token keeps expiring with `invalid_grant`, set the OAuth consent screen publishing status to **In Production** in Google Cloud Console (personal use does not require verification; just click through the unverified app prompt once).
 
 ## Usage
 
-### Interactive Mode
-Simply run without arguments to get a guided interactive prompt:
+### Web UI
+
+```bash
+python web.py
+```
+
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) to browse your Spotify playlists, transfer Liked Songs, paste any playlist URL, and watch live transfer progress.
+
+### CLI
+
+Interactive prompt:
+
 ```bash
 python main.py
 ```
 
-### Transfer a specific Spotify playlist
-Pass the playlist link or ID directly:
+Direct flags:
+
 ```bash
+# Single playlist by URL, URI, or ID
 python main.py --playlist "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
-```
-Or with custom playlist name & privacy:
-```bash
-python main.py --playlist "37i9dQZF1DXcBWIGoYBM5M" --name "My New Playlist" --privacy UNLISTED
-```
+python main.py --playlist "37i9dQZF1DXcBWIGoYBM5M" --name "My Playlist" --privacy UNLISTED
 
-### Transfer your Spotify "Liked Songs"
-```bash
+# Liked Songs
 python main.py --liked
-```
 
-### Transfer all playlists in your Spotify account
-```bash
+# All account playlists
 python main.py --all
 ```
 
-### Options:
-- `--delay <seconds>`: Pause between tracks to prevent rate limiting (default: `0.5`).
-- `--privacy {PRIVATE, PUBLIC, UNLISTED}`: Set visibility of created YouTube playlists (default: `PRIVATE`).
+Options:
+- `--privacy {PRIVATE,PUBLIC,UNLISTED}`: visibility of created YouTube Music playlists (default: `PRIVATE`)
+- `--delay <seconds>`: pause between track additions to avoid rate limiting (default: `0.5`)
 
----
+## Tests
 
-
+```bash
+python -m unittest discover -s tests -v
+```

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spotify → YouTube Music Migrator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            spotify: '#1DB954',
+            ytm: '#FF0033',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #18181b; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
+  <div class="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-zinc-800/80">
+      <div>
+        <div class="flex items-center gap-3">
+          <div class="flex items-center -space-x-1.5">
+            <span class="w-4 h-4 rounded-full bg-spotify inline-block ring-2 ring-zinc-950"></span>
+            <span class="w-4 h-4 rounded-full bg-ytm inline-block ring-2 ring-zinc-950"></span>
+          </div>
+          <h1 class="text-2xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 via-zinc-100 to-rose-400 bg-clip-text text-transparent">
+            Spotify → YouTube Music
+          </h1>
+        </div>
+        <p class="text-sm text-zinc-400 mt-1">Migrate playlists and Liked Songs cleanly with live track matching.</p>
+      </div>
+
+      <!-- Auth Status Pills -->
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button id="btn-spotify-status" onclick="openSpotifyModal()"
+          class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition">
+          <span id="dot-spotify" class="w-2 h-2 rounded-full bg-zinc-500"></span>
+          <span id="label-spotify">Spotify: Checking...</span>
+        </button>
+        <button id="btn-ytm-status" onclick="openYtmModal()"
+          class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition">
+          <span id="dot-ytm" class="w-2 h-2 rounded-full bg-zinc-500"></span>
+          <span id="label-ytm">YT Music: Checking...</span>
+        </button>
+        <button onclick="refreshStatus()" title="Refresh connection status"
+          class="p-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Global Transfer Options -->
+    <section class="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-6">
+        <div class="flex items-center gap-2.5">
+          <label for="select-privacy" class="text-xs font-medium uppercase tracking-wider text-zinc-400">YT Privacy</label>
+          <select id="select-privacy"
+            class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500">
+            <option value="PRIVATE" selected>Private</option>
+            <option value="UNLISTED">Unlisted</option>
+            <option value="PUBLIC">Public</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <label for="range-delay" class="text-xs font-medium uppercase tracking-wider text-zinc-400">
+            Rate Delay: <span id="label-delay" class="text-zinc-200 font-semibold">0.5s</span>
+          </label>
+          <input id="range-delay" type="range" min="0" max="2" step="0.1" value="0.5"
+            class="w-28 accent-emerald-500 cursor-pointer" />
+        </div>
+      </div>
+
+      <!-- Mode Tabs -->
+      <div class="inline-flex p-1 rounded-xl bg-zinc-950 border border-zinc-800">
+        <button id="tab-url" onclick="switchTab('url')"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition bg-zinc-800 text-white">
+          By URL / ID
+        </button>
+        <button id="tab-library" onclick="switchTab('library')"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition text-zinc-400 hover:text-zinc-200">
+          My Spotify Library
+        </button>
+      </div>
+    </section>
+
+    <!-- Panel 1: By Playlist URL / ID -->
+    <section id="panel-url" class="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 space-y-5">
+      <div class="space-y-2">
+        <label for="input-playlist-url" class="block text-sm font-medium text-zinc-200">
+          Spotify Playlist Link, URI, or ID
+        </label>
+        <div class="flex flex-col sm:flex-row gap-2.5">
+          <input id="input-playlist-url" type="text"
+            placeholder="https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+            class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500" />
+          <button onclick="previewPlaylist()"
+            class="px-4 py-2.5 rounded-xl text-sm font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-100 transition whitespace-nowrap">
+            Preview
+          </button>
+        </div>
+      </div>
+
+      <!-- Optional Preview Card -->
+      <div id="preview-card" class="hidden bg-zinc-950/80 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
+        <img id="preview-img" src="" alt="Cover" class="w-16 h-16 rounded-lg object-cover bg-zinc-800 hidden" />
+        <div class="min-w-0 flex-1">
+          <h3 id="preview-name" class="font-semibold text-zinc-100 truncate"></h3>
+          <p id="preview-meta" class="text-xs text-zinc-400 mt-0.5"></p>
+          <p id="preview-desc" class="text-xs text-zinc-500 mt-1 line-clamp-1"></p>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+        <div class="flex-1 space-y-1.5">
+          <label for="input-custom-name" class="block text-xs font-medium text-zinc-400">
+            Custom YouTube Playlist Name (optional)
+          </label>
+          <input id="input-custom-name" type="text" placeholder="Leave blank to keep Spotify playlist name"
+            class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500" />
+        </div>
+        <button id="btn-transfer-url" onclick="startUrlTransfer()"
+          class="px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-zinc-950 transition shadow-lg shadow-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed">
+          Transfer Playlist
+        </button>
+      </div>
+    </section>
+
+    <!-- Panel 2: My Spotify Library -->
+    <section id="panel-library" class="hidden space-y-4">
+      <!-- Liked Songs & Batch Card -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-gradient-to-br from-indigo-950/60 via-zinc-900 to-zinc-900 border border-indigo-500/20 rounded-2xl p-5 flex items-center justify-between gap-4">
+          <div>
+            <h3 class="font-semibold text-zinc-100">Liked Songs</h3>
+            <p id="liked-count-label" class="text-xs text-zinc-400 mt-1">Your saved Spotify tracks</p>
+          </div>
+          <button onclick="startTransfer({ mode: 'liked' })"
+            class="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-500 hover:bg-indigo-400 text-white transition whitespace-nowrap">
+            Transfer Liked
+          </button>
+        </div>
+
+        <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 flex items-center justify-between gap-4">
+          <div>
+            <h3 class="font-semibold text-zinc-100">All Account Playlists</h3>
+            <p class="text-xs text-zinc-400 mt-1">Migrate every playlist sequentially</p>
+          </div>
+          <button onclick="startTransfer({ mode: 'all' })"
+            class="px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 transition whitespace-nowrap">
+            Transfer All
+          </button>
+        </div>
+      </div>
+
+      <!-- Search + Playlist Grid -->
+      <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold text-zinc-200">Your Playlists</h2>
+          <div class="flex items-center gap-2">
+            <input id="input-filter-playlists" type="text" placeholder="Filter playlists..." oninput="renderPlaylists()"
+              class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500" />
+            <button onclick="loadLibrary()"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition">
+              Reload
+            </button>
+          </div>
+        </div>
+
+        <div id="playlists-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div class="col-span-full text-center py-8 text-xs text-zinc-500">
+            Click "Reload" or switch here once Spotify is connected.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Migration Progress Console -->
+    <section id="progress-section" class="hidden bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 id="progress-title" class="text-base font-semibold text-zinc-100">Starting Transfer...</h2>
+          <p id="progress-subtitle" class="text-xs text-zinc-400 mt-0.5">Preparing migration job</p>
+        </div>
+        <div id="progress-counter" class="text-sm font-mono font-semibold text-emerald-400">0%</div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="w-full h-2.5 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
+        <div id="progress-bar"
+          class="h-full bg-gradient-to-r from-emerald-500 to-rose-500 transition-all duration-300"
+          style="width: 0%"></div>
+      </div>
+
+      <!-- Summary Banner (shown on complete) -->
+      <div id="summary-banner" class="hidden rounded-xl p-4 bg-zinc-950 border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="space-y-1">
+          <div id="summary-headline" class="text-sm font-semibold text-emerald-400">Transfer Complete</div>
+          <div id="summary-stats" class="text-xs text-zinc-400"></div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2.5">
+          <a id="link-open-ytm" href="#" target="_blank" rel="noopener noreferrer"
+            class="hidden px-4 py-2 rounded-lg text-xs font-semibold bg-ytm hover:bg-rose-600 text-white transition">
+            Open on YouTube Music ↗
+          </a>
+          <a id="link-failed-tracks" href="/api/failed-tracks" target="_blank"
+            class="hidden px-4 py-2 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition">
+            Download failed_tracks.txt
+          </a>
+        </div>
+      </div>
+
+      <!-- Live Track Log -->
+      <div class="bg-zinc-950 border border-zinc-800/90 rounded-xl p-3">
+        <div class="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mb-2 px-1">Live Activity Log</div>
+        <div id="track-log" class="h-64 overflow-y-auto space-y-1 font-mono text-xs px-1"></div>
+      </div>
+    </section>
+
+    <!-- Toast / Error Banner -->
+    <div id="toast" class="hidden fixed bottom-5 right-5 max-w-sm bg-zinc-900 border border-rose-500/40 text-rose-200 px-4 py-3 rounded-xl shadow-2xl text-xs z-50"></div>
+  </div>
+
+  <!-- Spotify Auth Modal -->
+  <div id="modal-spotify" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-40">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-semibold text-zinc-100">Spotify Connection</h3>
+        <button onclick="closeModals()" class="text-zinc-500 hover:text-zinc-200 text-sm">✕</button>
+      </div>
+      <p id="modal-spotify-msg" class="text-xs text-zinc-400"></p>
+      <div class="space-y-3">
+        <button onclick="openSpotifyLoginUrl()"
+          class="w-full py-2.5 rounded-xl text-xs font-semibold bg-spotify hover:bg-emerald-400 text-zinc-950 transition">
+          1. Open Spotify Authorization Page ↗
+        </button>
+        <div class="space-y-1.5">
+          <label class="block text-xs text-zinc-400">
+            2. After approving, paste the redirected URL from your browser address bar here:
+          </label>
+          <input id="input-spotify-callback" type="text" placeholder="http://127.0.0.1:8080/?code=..."
+            class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500" />
+        </div>
+        <button onclick="submitSpotifyCallback()"
+          class="w-full py-2 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-100 transition">
+          Complete Spotify Connection
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- YouTube Music Auth Modal -->
+  <div id="modal-ytm" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-40">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-semibold text-zinc-100">YouTube Music Connection</h3>
+        <button onclick="closeModals()" class="text-zinc-500 hover:text-zinc-200 text-sm">✕</button>
+      </div>
+      <p id="modal-ytm-msg" class="text-xs text-zinc-400"></p>
+
+      <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400 space-y-1">
+        <div class="font-semibold text-zinc-200">Option A: Google OAuth (Terminal)</div>
+        <div>Run <code class="text-emerald-400">python auth_setup.py</code> in your terminal to generate <code class="text-zinc-200">oauth.json</code>, then click Refresh.</div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="text-xs font-semibold text-zinc-200">Option B: Paste Browser Headers (DevTools)</div>
+        <p class="text-[11px] text-zinc-400">
+          Open <span class="text-zinc-200">music.youtube.com</span> → F12 Network → click a POST request (e.g. <code>browse</code>) → copy raw Request Headers and paste below:
+        </p>
+        <textarea id="input-ytm-headers" rows="5" placeholder="Paste raw request headers here..."
+          class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-zinc-100 focus:outline-none focus:border-rose-500"></textarea>
+        <button onclick="submitYtmHeaders()"
+          class="w-full py-2.5 rounded-xl text-xs font-semibold bg-ytm hover:bg-rose-600 text-white transition">
+          Save Browser Auth (browser.json)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
